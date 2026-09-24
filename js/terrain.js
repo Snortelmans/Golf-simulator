@@ -7,6 +7,7 @@
 // De functie toWorld() zet een baanpunt om naar een Babylon-positie.
 
 import { heightAt, surfaceAt } from "./course-format.js";
+import { SEASONS, mixHex } from "./seasons.js";
 
 /** Kleuren per thema. Elke ondergrond krijgt een kleur; de rest is sfeer. */
 export const THEMES = {
@@ -32,6 +33,15 @@ export const THEMES = {
   },
 };
 
+/** Kleurt het gras van een thema naar het seizoen (zomer geel, herfst bruin, winter wit). */
+export function seasonTheme(theme, seasonKey) {
+  const season = SEASONS[seasonKey];
+  if (!season) return theme;
+  const out = { ...theme };
+  for (const key of ["tee", "fairway", "rough", "green"]) out[key] = mixHex(theme[key], season.tint, season.tintAmount);
+  return out;
+}
+
 export function toWorld(hole, x, y, extraHeight = 0) {
   return new BABYLON.Vector3(x, heightAt(hole, x, y) + extraHeight, y);
 }
@@ -41,8 +51,8 @@ function color3(hex) {
 }
 
 /** Bouwt de hele hole in de scene. Geeft de losse onderdelen terug zodat we ze later kunnen opruimen. */
-export function buildHole(scene, hole, themeKey = "classic") {
-  const theme = THEMES[themeKey] || THEMES.classic;
+export function buildHole(scene, hole, themeKey = "classic", seasonKey = "lente") {
+  const theme = seasonTheme(THEMES[themeKey] || THEMES.classic, seasonKey);
   const parts = [];
 
   scene.clearColor = BABYLON.Color4.FromHexString(theme.sky + "ff");

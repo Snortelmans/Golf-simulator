@@ -33,9 +33,10 @@ rechts op de range, dan gaat de bal in de app 3 graden rechts van de vlag.
 
 Stap 3 en 4 zijn hetzelfde voor verzonnen en echte slagen. Dat is het hele idee.
 
-## Trackman Range (week 3)
+## Gemeten landingspunt
 
-Trackman levert per slag ook een landingspunt en de hele vlucht. Die nemen we
-dan over in plaats van zelf te rekenen; alleen het uitrollen blijft van ons.
-Zolang er geen toegang is, testen we tegen een nagebouwde server die dezelfde
-berichten stuurt als de echte.
+Trackman Range (en sommige launch monitors via Open Connect) melden ook hoe ver
+de bal droeg en hoe ver zijwaarts hij landde (`measuredCarry`, `measuredSide`).
+Dan is de simulator leidend: `HoleGame.simulate()` stuurt de slag in een paar
+stappen bij tot onze bal op dat punt landt. Ons model doet dan alleen nog de
+animatie en het uitrollen. Zie docs/simulators.md voor het aansluiten.

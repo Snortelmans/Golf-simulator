@@ -20,6 +20,8 @@
  * @property {string} source       naam van de bron ("simulatie", "trackman-range", ...)
  * @property {string} [club]       clubnaam als bekend
  * @property {number} timestamp    ms sinds 1970
+ * @property {number} [measuredCarry] carry in meters zoals de simulator hem meldt (Trackman, Open Connect)
+ * @property {number} [measuredSide]  zijwaartse afwijking van het landingspunt in meters, + = rechts
  * @property {Object} [raw]        de originele data van de simulator, voor debuggen
  */
 
@@ -42,6 +44,8 @@ export function normalizeShot(partial) {
     source: partial.source || "onbekend",
     club: partial.club,
     timestamp: partial.timestamp || Date.now(),
+    measuredCarry: partial.measuredCarry > 0 ? partial.measuredCarry : undefined,
+    measuredSide: typeof partial.measuredSide === "number" ? partial.measuredSide : undefined,
     raw: partial.raw,
   };
   for (const [key, [min, max]] of Object.entries(LIMITS)) {

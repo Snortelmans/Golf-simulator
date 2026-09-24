@@ -27,17 +27,46 @@
       <span class="stat">Tot de vlag <b id="afstand">-</b></span>
       <span class="stat">Ligging <b id="ligging">-</b></span>
       <span class="stat">Ronde <b id="ronde">0</b></span>
+      <span class="stat">Wind <b id="wind">-</b></span>
     </header>
+
+    <section class="scorekaart" id="scorekaart" hidden aria-label="Scorekaart">
+      <h2>Scorekaart</h2>
+      <div class="tablewrap"><table id="scoreTabel"></table></div>
+      <button type="button" id="sluitScorekaart">Sluit</button>
+    </section>
 
     <section class="panel" aria-label="Bediening">
       <p id="melding">Baan laden…</p>
       <button type="button" id="volgende" class="primary" hidden>Volgende hole</button>
-      <h2>Sla (verzonnen slag)</h2>
-      <div class="clubs" id="clubs"></div>
       <div class="row">
-        <label for="kracht">Kracht</label>
-        <input type="range" id="kracht" min="30" max="110" value="100">
-        <span id="krachtWaarde">100%</span>
+        <label for="bron">Bron</label>
+        <select id="bron">
+          <option value="simulatie">Verzonnen slagen</option>
+          <option value="openconnect">GSPro Open Connect (via brug)</option>
+          <option value="trackman">Trackman Range</option>
+        </select>
+        <span class="bronStatus" id="bronStatus"></span>
+      </div>
+      <div class="row" id="bronAdresRij" hidden>
+        <label for="bronAdres">Adres</label>
+        <input type="text" id="bronAdres" value="ws://localhost:8921">
+        <button type="button" id="bronVerbind">Verbind</button>
+      </div>
+      <p class="hint" id="bronUitleg" hidden></p>
+      <div id="simBediening">
+        <h2>Sla (verzonnen slag)</h2>
+        <div class="clubs" id="clubs"></div>
+        <div class="row">
+          <label for="kracht">Kracht</label>
+          <input type="range" id="kracht" min="30" max="110" value="100">
+          <span id="krachtWaarde">100%</span>
+        </div>
+      </div>
+      <div class="row">
+        <label for="seizoen">Seizoen</label>
+        <select id="seizoen"></select>
+        <button type="button" id="toonScorekaart">Scorekaart</button>
       </div>
       <div class="row">
         <label for="thema">Thema</label>

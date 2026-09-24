@@ -2,13 +2,16 @@
 // Beide werken op hetzelfde baan-object. Wat je bouwt, speel je meteen.
 
 import { validateCourse, holeLength, computePar, distance } from "./course-format.js";
-import { HoleGame, surfaceLabel } from "./game.js";
+import { HoleGame, surfaceLabel, scoreName } from "./game.js";
 import { ShotBus } from "./shots/shot-layer.js";
 import { SimulatedSource, CLUBS } from "./shots/sim-source.js";
+import { OpenConnectSource } from "./shots/openconnect-source.js";
+import { TrackmanRangeSource } from "./shots/trackman-range-source.js";
 import { buildHole, drawPath, toWorld, THEMES } from "./terrain.js";
 import { Editor } from "./editor.js";
 import { TEMPLATES } from "./templates.js";
 import { saveLocal, loadLocal, toText, fromText, newCourse } from "./storage.js";
+import { SEASONS, randomWind, describeWind } from "./seasons.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -17,6 +20,9 @@ let course = null; // de baan (één object voor bouwen én spelen)
 let holeIndex = 0; // welke hole er nu gespeeld of bewerkt wordt
 let mode = "spelen";
 const scores = []; // slagen per hole in deze ronde
+let seasonKey = "lente";
+let wind = { x: 0, y: 0, speed: 0 };
+try { seasonKey = localStorage.getItem("eigenbaan.seizoen") || "lente"; } catch { /* niets */ }
 
 // ============ Spelen: 3D ============
 const canvas = el("scene");
@@ -34,19 +40,63 @@ camera.wheelPrecision = 8;
 camera.attachControl(canvas, true);
 
 let game, world, pathLine, animating = false;
+
+// ============ De slagbronnen ============
 const bus = new ShotBus();
-const sim = new SimulatedSource();
-sim.start(bus);
+const sources = {
+  simulatie: new SimulatedSource(),
+  openconnect: new OpenConnectSource("ws://localhost:8921", showSourceStatus),
+  trackman: new TrackmanRangeSource("ws://localhost:8922", showSourceStatus),
+};
+const SOURCE_HELP = {
+  simulatie: "",
+  openconnect: "Start op de pc met de launch monitor: node tools/openconnect-bridge.mjs. Stel in de app van je launch monitor GSPro in als doel. De brug stuurt elke slag hierheen.",
+  trackman: "Adres van de Trackman Range-metingen (uit de sessie), of ws://localhost:8922 voor de nagebouwde Trackman: node tools/mock-trackman.mjs.",
+};
+let sourceKey = "simulatie";
+sources.simulatie.start(bus);
 
 bus.on((shot) => {
-  if (!game || animating || mode !== "spelen") return;
+  if (!game || mode !== "spelen") return;
+  if (animating) { queued.push(shot); return; }
   const entry = game.applyShot(shot);
   if (entry) playEntry(entry);
 });
+const queued = []; // slagen die binnenkwamen tijdens een animatie
 
+function switchSource(key) {
+  sources[sourceKey].stop();
+  sourceKey = key;
+  const src = sources[key];
+  el("simBediening").hidden = key !== "simulatie";
+  el("bronAdresRij").hidden = key === "simulatie";
+  el("bronUitleg").hidden = key === "simulatie";
+  el("bronUitleg").textContent = SOURCE_HELP[key];
+  if (key === "simulatie") { showSourceStatus("verbonden", ""); src.start(bus); return; }
+  el("bronAdres").value = src.url;
+  src.start(bus);
+}
+function showSourceStatus(status, detail) {
+  const box = el("bronStatus");
+  box.className = "bronStatus " + status;
+  box.textContent = sourceKey === "simulatie" ? "" : { uit: "uit", verbinden: "verbinden…", verbonden: "verbonden", fout: "geen verbinding" }[status] || status;
+  if (detail && sourceKey !== "simulatie") el("melding").textContent = detail;
+  if (status === "verbonden" && sourceKey !== "simulatie" && game && !game.finished) el("melding").textContent = "Verbonden. Sla een bal op de range.";
+}
+el("bron").addEventListener("change", () => switchSource(el("bron").value));
+el("bronVerbind").addEventListener("click", () => {
+  const src = sources[sourceKey];
+  src.stop();
+  src.url = el("bronAdres").value.trim();
+  src.start(bus);
+});
+
+// ============ Ronde en holes ============
 function startRound() {
   scores.length = 0;
   holeIndex = 0;
+  wind = randomWind(seasonKey);
+  el("scorekaart").hidden = true;
   startHole(0);
 }
 
@@ -58,14 +108,15 @@ function startHole(index) {
   holeIndex = Math.min(index, course.holes.length - 1);
   if (world) world.dispose();
   if (pathLine) { pathLine.dispose(); pathLine = null; }
-  game = new HoleGame(course, holeIndex);
-  world = buildHole(scene, game.hole, course.theme || "classic");
+  game = new HoleGame(course, holeIndex, { wind, rollFactor: SEASONS[seasonKey].rollFactor });
+  world = buildHole(scene, game.hole, course.theme || "classic", seasonKey);
   el("thema").value = course.theme || "classic";
   el("holeNaam").textContent = `${holeIndex + 1}. ${game.hole.name || "Hole"}`;
   el("holeInfo").textContent = `Par ${game.par} · ${Math.round(holeLength(game.hole))} m`;
-  el("melding").textContent = holeIndex === 0
-    ? "Kies een club en sla. De slag is verzonnen: er hangt nog geen simulator aan."
-    : `Hole ${holeIndex + 1}. Kies een club en sla.`;
+  el("wind").textContent = describeWind(wind);
+  el("melding").textContent = sourceKey === "simulatie"
+    ? (holeIndex === 0 ? "Kies een club en sla. De slag is verzonnen: er hangt nog geen simulator aan." : `Hole ${holeIndex + 1}. Kies een club en sla.`)
+    : `Hole ${holeIndex + 1}. Sla een bal op de range.`;
   el("laatste").hidden = true;
   el("volgende").hidden = true;
   lookBehindBall();
@@ -77,9 +128,16 @@ function updateHud() {
   el("afstand").textContent = game.finished ? "in het gat" : `${Math.round(game.distanceToPin())} m`;
   el("ligging").textContent = game.finished ? game.scoreName() : surfaceLabel(game.surface());
   const played = scores.reduce((a, b) => a + b, 0) + (game.finished ? 0 : game.strokes);
-  const parSoFar = course.holes.slice(0, scores.length).reduce((a, h) => a + (h.par || computePar(holeLength(h))), 0);
-  el("ronde").textContent = scores.length ? `${played} (par ${parSoFar} na ${scores.length})` : `${played}`;
+  const parSoFar = course.holes.slice(0, scores.length).reduce((a, h) => a + holePar(h), 0);
+  el("ronde").textContent = scores.length ? `${played} (${signed(played - parSoFar)} na ${scores.length})` : `${played}`;
   el("clubs").querySelectorAll("button").forEach((b) => (b.disabled = game.finished || animating));
+}
+
+function holePar(h) {
+  return h.par || computePar(holeLength(h));
+}
+function signed(n) {
+  return n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`;
 }
 
 function lookBehindBall(radius = 14) {
@@ -127,12 +185,19 @@ function finishEntry(entry) {
       el("volgende").hidden = false;
     } else {
       const total = scores.reduce((a, b) => a + b, 0);
-      const par = course.holes.reduce((a, h) => a + (h.par || computePar(holeLength(h))), 0);
-      el("melding").textContent += ` Ronde klaar: ${total} slagen op par ${par} (${total - par >= 0 ? "+" : ""}${total - par}).`;
+      const par = course.holes.reduce((a, h) => a + holePar(h), 0);
+      el("melding").textContent += ` Ronde klaar: ${total} slagen, ${signed(total - par)}.`;
+      showScorecard();
     }
   }
   lookBehindBall(game.finished ? 20 : 14);
   updateHud();
+  // Slagen die tijdens de animatie binnenkwamen (van een echte simulator) alsnog spelen.
+  if (queued.length && !game.finished) {
+    const next = queued.shift();
+    const e = game.applyShot(next);
+    if (e) playEntry(e);
+  } else queued.length = 0;
 }
 
 function showShot(shot, entry) {
@@ -143,8 +208,30 @@ function showShot(shot, entry) {
   el("lsAngle").textContent = `${shot.launchAngle.toFixed(1)}°`;
   el("lsDir").textContent = `${shot.direction > 0 ? "+" : ""}${shot.direction.toFixed(1)}°`;
   el("lsSpin").textContent = `${Math.round(shot.backSpin)} / ${Math.round(shot.sideSpin)} rpm`;
-  el("lsCarry").textContent = `${Math.round(entry.result.carry)} m`;
+  el("lsCarry").textContent = `${Math.round(entry.result.carry)} m` + (shot.measuredCarry ? ` (simulator: ${Math.round(shot.measuredCarry)} m)` : "");
 }
+
+// Scorekaart.
+function showScorecard() {
+  const table = el("scoreTabel");
+  const holes = course.holes;
+  const head = `<tr><th>Hole</th>${holes.map((_, i) => `<th>${i + 1}</th>`).join("")}<th>Tot.</th></tr>`;
+  const parRow = `<tr><th>Par</th>${holes.map((h) => `<td>${holePar(h)}</td>`).join("")}<td>${holes.reduce((a, h) => a + holePar(h), 0)}</td></tr>`;
+  const played = holes.map((h, i) => scores[i]);
+  const total = played.reduce((a, b) => a + (b || 0), 0);
+  const scoreRow = `<tr><th>Slagen</th>${holes.map((h, i) => {
+    const s = played[i];
+    if (s == null) return "<td>-</td>";
+    const d = s - holePar(h);
+    return `<td class="${d < 0 ? "min" : d > 0 ? "plus" : ""}" title="${scoreName(s, holePar(h))}">${s}</td>`;
+  }).join("")}<td>${total}</td></tr>`;
+  const parPlayed = holes.filter((_, i) => played[i] != null).reduce((a, h) => a + holePar(h), 0);
+  const diffRow = `<tr><th>+/-</th>${holes.map((h, i) => played[i] == null ? "<td></td>" : `<td>${signed(played[i] - holePar(h))}</td>`).join("")}<td>${signed(total - parPlayed)}</td></tr>`;
+  table.innerHTML = head + parRow + scoreRow + diffRow;
+  el("scorekaart").hidden = false;
+}
+el("toonScorekaart").addEventListener("click", () => { if (el("scorekaart").hidden) showScorecard(); else el("scorekaart").hidden = true; });
+el("sluitScorekaart").addEventListener("click", () => (el("scorekaart").hidden = true));
 
 // Knoppen in de speelstand.
 for (const [key, club] of Object.entries(CLUBS)) {
@@ -152,7 +239,7 @@ for (const [key, club] of Object.entries(CLUBS)) {
   b.type = "button";
   b.id = `club-${key}`;
   b.textContent = club.label;
-  b.addEventListener("click", () => sim.hit(key, Number(el("kracht").value) / 100));
+  b.addEventListener("click", () => sources.simulatie.hit(key, Number(el("kracht").value) / 100));
   el("clubs").appendChild(b);
 }
 el("kracht").addEventListener("input", () => (el("krachtWaarde").textContent = `${el("kracht").value}%`));
@@ -166,6 +253,18 @@ for (const sel of [el("thema"), el("baanThema")]) {
     sel.appendChild(o);
   }
 }
+for (const [key, s] of Object.entries(SEASONS)) {
+  const o = document.createElement("option");
+  o.value = key;
+  o.textContent = s.label;
+  el("seizoen").appendChild(o);
+}
+el("seizoen").value = seasonKey;
+el("seizoen").addEventListener("change", () => {
+  seasonKey = el("seizoen").value;
+  try { localStorage.setItem("eigenbaan.seizoen", seasonKey); } catch { /* niets */ }
+  startRound();
+});
 el("thema").addEventListener("change", () => { course.theme = el("thema").value; el("baanThema").value = course.theme; startHole(holeIndex); saveLocal(course); });
 el("cameraBal").addEventListener("click", () => lookBehindBall());
 el("cameraBoven").addEventListener("click", () => {
@@ -257,7 +356,6 @@ function changed() {
   saveLocal(course);
 }
 
-// Gereedschap kiezen.
 el("tools").querySelectorAll("button").forEach((b) => {
   b.addEventListener("click", () => {
     el("tools").querySelectorAll("button").forEach((x) => x.classList.remove("active"));
@@ -282,7 +380,6 @@ document.addEventListener("keydown", (e) => {
   if ((e.key === "Delete" || e.key === "Backspace") && !editor.draft) { editor.deleteSelected(); refreshSelection(); }
 });
 
-// Heuvel-schuifjes: gelden voor de nieuwe heuvel én voor de geselecteerde.
 for (const id of ["heuvelStraal", "heuvelHoogte"]) {
   el(id).addEventListener("input", () => {
     showHillValues();
@@ -295,7 +392,6 @@ for (const id of ["heuvelStraal", "heuvelHoogte"]) {
 }
 showHillValues();
 
-// Selectie: zonetype, volgorde, wissen.
 el("zoneType").addEventListener("change", () => {
   const sel = editor.selectedItem();
   if (sel?.kind === "zone") { sel.item.type = el("zoneType").value; changed(); }
@@ -304,8 +400,8 @@ function moveZone(delta) {
   const s = editor.selected;
   if (s?.kind !== "zone") return;
   const to = s.index + delta;
-  if (to < 0 || to >= course.holes[holeIndex].zones.length) return;
   const zones = course.holes[holeIndex].zones;
+  if (to < 0 || to >= zones.length) return;
   [zones[s.index], zones[to]] = [zones[to], zones[s.index]];
   editor.selected = { kind: "zone", index: to };
   changed();
@@ -314,10 +410,8 @@ el("zoneOnder").addEventListener("click", () => moveZone(-1));
 el("zoneBoven").addEventListener("click", () => moveZone(1));
 el("selectieWissen").addEventListener("click", () => { editor.deleteSelected(); refreshSelection(); });
 
-// Holes toevoegen, dupliceren, verwijderen, verplaatsen.
 el("holeToevoegen").addEventListener("click", () => {
   const hole = TEMPLATES[el("sjabloon").value].make();
-  hole.number = course.holes.length + 1;
   course.holes.push(hole);
   renumber();
   editHole(course.holes.length - 1);
@@ -351,7 +445,6 @@ function renumber() {
   course.holes.forEach((h, i) => (h.number = i + 1));
 }
 
-// Formulier van de hole.
 el("holeNaamInvoer").addEventListener("input", () => { course.holes[holeIndex].name = el("holeNaamInvoer").value; refreshHoleList(); saveLocal(course); });
 for (const id of ["terreinBreedte", "terreinLengte"]) {
   el(id).addEventListener("change", () => {
@@ -370,7 +463,6 @@ el("holePar").addEventListener("change", () => {
 });
 el("autoPutt").addEventListener("change", () => { course.holes[holeIndex].autoPuttMeters = clamp(Number(el("autoPutt").value), 0, 15); saveLocal(course); });
 
-// Baan: naam, thema, bewaren, spelen, tekst.
 el("baanNaamInvoer").addEventListener("input", () => { course.name = el("baanNaamInvoer").value; refreshHoleList(); saveLocal(course); });
 el("baanThema").addEventListener("change", () => { course.theme = el("baanThema").value; editor.setHole(course.holes[holeIndex] || null, course.theme); saveLocal(course); });
 el("speelBaan").addEventListener("click", () => setMode("spelen", true));
@@ -434,7 +526,7 @@ el("tabBouwen").addEventListener("click", () => setMode("bouwen"));
 
 // Handig om te leren: open de console (F12) en typ bijvoorbeeld
 //   eigenBaan.sim.custom({ ballSpeed: 70, launchAngle: 10, direction: 5, backSpin: 2500 })
-window.eigenBaan = { get game() { return game; }, get course() { return course; }, sim, bus, scene, camera, CLUBS, editor };
+window.eigenBaan = { get game() { return game; }, get course() { return course; }, sim: sources.simulatie, sources, bus, scene, camera, CLUBS, editor };
 
 // ============ Start ============
 async function boot() {

@@ -53,6 +53,10 @@ export function simulateShot(shot, start, aim, hole, options = {}) {
   const dt = options.dt ?? 0.005;
   const sampleEvery = options.sampleEvery ?? 0.02;
   const maxTime = 60;
+  // Wind in baancoördinaten (m/s): de lucht beweegt, dus de bal 'voelt' zijn snelheid t.o.v. de lucht.
+  const wind = options.wind || { x: 0, y: 0 };
+  // Seizoen: nat gras rolt minder (factor < 1), droog zomergras meer (> 1).
+  const rollFactor = options.rollFactor ?? 1;
 
   // Richtlijn draaien met de afwijking van de slag (direction).
   const dirRad = (shot.direction * Math.PI) / 180;
@@ -87,7 +91,9 @@ export function simulateShot(shot, start, aim, hole, options = {}) {
 
   while (t < maxTime) {
     if (phase === "flight" || phase === "bounce") {
-      const speed = Math.hypot(v.x, v.y, v.h);
+      // Snelheid ten opzichte van de lucht: daar werken weerstand en lift op.
+      const rx = v.x - wind.x, ry = v.y - wind.y, rh = v.h;
+      const speed = Math.hypot(rx, ry, rh);
       if (speed > 0.01) {
         // Spin-verhouding bepaalt hoeveel lift en extra weerstand er is.
         const omega = Math.hypot(backSpin, sideSpin);
@@ -96,22 +102,22 @@ export function simulateShot(shot, start, aim, hole, options = {}) {
         const cl = Math.min(0.35, 0.1 + 1.2 * spinRatio);
 
         // Luchtweerstand.
-        const ax = -k * cd * speed * v.x;
-        const ay = -k * cd * speed * v.y;
-        const ah = -k * cd * speed * v.h;
+        const ax = -k * cd * speed * rx;
+        const ay = -k * cd * speed * ry;
+        const ah = -k * cd * speed * rh;
 
         // Lift: staat loodrecht op de vliegrichting én op de spin-as.
         let lx = 0, ly = 0, lh = 0;
         if (omega > 0) {
-          const hs = Math.hypot(v.x, v.y) || 1e-6;
-          const fx = v.x / hs, fy = v.y / hs; // horizontale vliegrichting
+          const hs = Math.hypot(rx, ry) || 1e-6;
+          const fx = rx / hs, fy = ry / hs; // horizontale vliegrichting (t.o.v. de lucht)
           // Backspin-as wijst naar rechts (fy, -fx, 0); sidespin-as wijst omlaag (0,0,-1) voor een slice.
           let axX = (backSpin / omega) * fy;
           let axY = (backSpin / omega) * -fx;
           // Sidespin buigt in dit model iets te hard; 0.6 brengt het in lijn met Trackman-ervaring.
           let axH = (sideSpin / omega) * -0.6;
           // Kruisproduct spin-as × vliegrichting geeft de liftrichting.
-          const ux = v.x / speed, uy = v.y / speed, uh = v.h / speed;
+          const ux = rx / speed, uy = ry / speed, uh = rh / speed;
           lx = axY * uh - axH * uy;
           ly = axH * ux - axX * uh;
           lh = axX * uy - axY * ux;
@@ -168,8 +174,9 @@ export function simulateShot(shot, start, aim, hole, options = {}) {
       const speed = Math.hypot(v.x, v.y);
       if (speed < 0.05) break;
       const slope = slopeAt(hole, p.x, p.y);
-      const ax = (-s.roll * v.x) / speed - GRAVITY * slope.dx;
-      const ay = (-s.roll * v.y) / speed - GRAVITY * slope.dy;
+      const roll = s.roll / rollFactor;
+      const ax = (-roll * v.x) / speed - GRAVITY * slope.dx;
+      const ay = (-roll * v.y) / speed - GRAVITY * slope.dy;
       v.x += ax * dt;
       v.y += ay * dt;
       // Voorkom dat afremmen de bal de andere kant op duwt.

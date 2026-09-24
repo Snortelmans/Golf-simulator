@@ -1,7 +1,7 @@
 # Eigen Baan
 
 Bouw je eigen golfhole en speel hem op de Trackman Range van je club.
-Werknaam. Week 2 van het maandplan: de baanbouwer.
+Werknaam. Week 3 van het maandplan: een ronde en de simulator-stekker.
 
 ## Wat het nu doet
 
@@ -18,7 +18,12 @@ Werknaam. Week 2 van het maandplan: de baanbouwer.
 - Par wordt automatisch berekend (3 tot 6), tenzij je hem zelf aanpast.
 - Bewaren op je eigen apparaat, en als tekst tonen, kopiëren, laden of downloaden.
 
-Er hangt nog geen echte simulator aan. Dat is week 3. Online delen is week 4.
+**Ronde en simulators** (week 3)
+- Scorekaart, wind die de bal echt beïnvloedt, vier seizoenen (kleur, rol, wind).
+- Drie bronnen van slagen: verzonnen, GSPro Open Connect (via een brug op de pc) en Trackman Range.
+- Nagebouwde Trackman Range om zonder toegang te testen. Zie [docs/simulators.md](docs/simulators.md).
+
+Online delen is week 4.
 
 ## Zelf draaien
 
@@ -51,13 +56,17 @@ js/physics.js              balvlucht, stuiteren, uitrollen
 js/game.js                 de spelregels: slagen tellen, water, putten
 js/shots/shot-layer.js     één slagformaat voor alle simulators (de 'reisstekker')
 js/shots/sim-source.js     verzonnen slagen per club
-js/shots/trackman-range-source.js   nog leeg, komt in week 3
+js/shots/openconnect-source.js      GSPro Open Connect (launch monitors thuis)
+js/shots/trackman-range-source.js   Trackman Range (op de club)
+js/seasons.js              seizoenen en wind
 js/terrain.js              van baandata naar 3D (Babylon.js)
 js/editor.js               de bouwer: tekenen van bovenaf op een 2D-canvas
 js/templates.js            sjablonen (kant-en-klare holes)
 js/storage.js              bewaren op het apparaat, tekst in en uit
 js/main.js                 knoopt alles aan elkaar
 vendor/babylon.js          de 3D-bibliotheek (Babylon.js 9.28, Apache 2.0)
+tools/openconnect-bridge.mjs   brug tussen launch monitor en app (draait op de pc)
+tools/mock-trackman.mjs        nagebouwde Trackman Range om te testen
 docs/                      uitleg per onderwerp
 ```
 
@@ -79,3 +88,4 @@ van Trackman de app in.
 
 - [docs/baanformaat.md](docs/baanformaat.md): hoe je een hole beschrijft
 - [docs/shot-laag.md](docs/shot-laag.md): hoe slagen van een simulator binnenkomen
+- [docs/simulators.md](docs/simulators.md): een launch monitor of Trackman Range aansluiten
