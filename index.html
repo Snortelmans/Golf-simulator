@@ -7,42 +7,158 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <canvas id="scene" aria-label="3D-weergave van de hole"></canvas>
+  <nav class="topbar">
+    <span class="brand">Eigen Baan</span>
+    <div class="tabs" role="tablist">
+      <button type="button" id="tabSpelen" class="tab active" role="tab" aria-selected="true">Spelen</button>
+      <button type="button" id="tabBouwen" class="tab" role="tab" aria-selected="false">Bouwen</button>
+    </div>
+    <span class="baanNaam" id="baanNaam"></span>
+  </nav>
 
-  <header class="hud">
-    <h1 id="holeNaam">Baan laden…</h1>
-    <span class="stat" id="holeInfo"></span>
-    <span class="stat">Slagen <b id="slagen">0</b></span>
-    <span class="stat">Tot de vlag <b id="afstand">-</b></span>
-    <span class="stat">Ligging <b id="ligging">-</b></span>
-  </header>
+  <!-- ===== Spelen ===== -->
+  <div id="spelen" class="mode">
+    <canvas id="scene" aria-label="3D-weergave van de hole"></canvas>
 
-  <section class="panel" aria-label="Bediening">
-    <p id="melding">Baan laden…</p>
-    <h2>Sla (verzonnen slag)</h2>
-    <div class="clubs" id="clubs"></div>
-    <div class="row">
-      <label for="kracht">Kracht</label>
-      <input type="range" id="kracht" min="30" max="110" value="100">
-      <span id="krachtWaarde">100%</span>
-    </div>
-    <div class="row">
-      <label for="thema">Thema</label>
-      <select id="thema"></select>
-      <button type="button" id="cameraBal" title="Camera achter de bal">Bal</button>
-      <button type="button" id="cameraBoven" title="Camera van boven">Boven</button>
-      <button type="button" id="opnieuw">Opnieuw</button>
-    </div>
-    <div class="laatste" id="laatste" hidden>
-      <span>Club</span><b id="lsClub"></b>
-      <span>Bron</span><b id="lsBron"></b>
-      <span>Balsnelheid</span><b id="lsSpeed"></b>
-      <span>Lanceerhoek</span><b id="lsAngle"></b>
-      <span>Richting</span><b id="lsDir"></b>
-      <span>Back/sidespin</span><b id="lsSpin"></b>
-      <span>Carry</span><b id="lsCarry"></b>
-    </div>
-  </section>
+    <header class="hud">
+      <h1 id="holeNaam">Baan laden…</h1>
+      <span class="stat" id="holeInfo"></span>
+      <span class="stat">Slagen <b id="slagen">0</b></span>
+      <span class="stat">Tot de vlag <b id="afstand">-</b></span>
+      <span class="stat">Ligging <b id="ligging">-</b></span>
+      <span class="stat">Ronde <b id="ronde">0</b></span>
+    </header>
+
+    <section class="panel" aria-label="Bediening">
+      <p id="melding">Baan laden…</p>
+      <button type="button" id="volgende" class="primary" hidden>Volgende hole</button>
+      <h2>Sla (verzonnen slag)</h2>
+      <div class="clubs" id="clubs"></div>
+      <div class="row">
+        <label for="kracht">Kracht</label>
+        <input type="range" id="kracht" min="30" max="110" value="100">
+        <span id="krachtWaarde">100%</span>
+      </div>
+      <div class="row">
+        <label for="thema">Thema</label>
+        <select id="thema"></select>
+        <button type="button" id="cameraBal" title="Camera achter de bal">Bal</button>
+        <button type="button" id="cameraBoven" title="Camera van boven">Boven</button>
+        <button type="button" id="opnieuw" title="Ronde opnieuw beginnen">Opnieuw</button>
+      </div>
+      <div class="laatste" id="laatste" hidden>
+        <span>Club</span><b id="lsClub"></b>
+        <span>Bron</span><b id="lsBron"></b>
+        <span>Balsnelheid</span><b id="lsSpeed"></b>
+        <span>Lanceerhoek</span><b id="lsAngle"></b>
+        <span>Richting</span><b id="lsDir"></b>
+        <span>Back/sidespin</span><b id="lsSpin"></b>
+        <span>Carry</span><b id="lsCarry"></b>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== Bouwen ===== -->
+  <div id="bouwen" class="mode" hidden>
+    <canvas id="editor" aria-label="Tekening van de hole van bovenaf"></canvas>
+
+    <aside class="bouwPaneel" aria-label="Bouwgereedschap">
+      <p id="bouwStatus" class="status">Kies een gereedschap.</p>
+
+      <h2>Holes</h2>
+      <div class="holes" id="holeLijst"></div>
+      <div class="row">
+        <select id="sjabloon"></select>
+        <button type="button" id="holeToevoegen">+ Hole</button>
+      </div>
+      <div class="row">
+        <button type="button" id="holeDupliceren">Dupliceer</button>
+        <button type="button" id="holeVerwijderen">Verwijder</button>
+        <button type="button" id="holeOmhoog" title="Eerder in de baan">▲</button>
+        <button type="button" id="holeOmlaag" title="Later in de baan">▼</button>
+      </div>
+
+      <h2>Gereedschap</h2>
+      <div class="tools" id="tools">
+        <button type="button" data-tool="verplaats" class="active">Verplaats</button>
+        <button type="button" data-tool="fairway">Fairway</button>
+        <button type="button" data-tool="green">Green</button>
+        <button type="button" data-tool="bunker">Bunker</button>
+        <button type="button" data-tool="water">Water</button>
+        <button type="button" data-tool="tee">Teebox</button>
+        <button type="button" data-tool="heuvel">Heuvel</button>
+        <button type="button" data-tool="wissen">Wissen</button>
+      </div>
+      <div class="row" id="draftKnoppen" hidden>
+        <button type="button" id="draftKlaar" class="primary">Klaar</button>
+        <button type="button" id="draftTerug">Punt terug</button>
+        <button type="button" id="draftAnnuleer">Annuleer</button>
+      </div>
+      <div id="heuvelOpties" hidden>
+        <div class="row">
+          <label for="heuvelStraal">Straal</label>
+          <input type="range" id="heuvelStraal" min="5" max="120" value="30">
+          <span id="heuvelStraalWaarde">30 m</span>
+        </div>
+        <div class="row">
+          <label for="heuvelHoogte">Hoogte</label>
+          <input type="range" id="heuvelHoogte" min="-8" max="12" step="0.5" value="3">
+          <span id="heuvelHoogteWaarde">+3 m</span>
+        </div>
+      </div>
+      <div id="selectieOpties" hidden>
+        <div class="row" id="zoneTypeRij">
+          <label for="zoneType">Zone</label>
+          <select id="zoneType">
+            <option value="fairway">Fairway</option>
+            <option value="green">Green</option>
+            <option value="bunker">Bunker</option>
+            <option value="water">Water</option>
+            <option value="tee">Teebox</option>
+            <option value="rough">Rough</option>
+          </select>
+          <button type="button" id="zoneOnder" title="Onder andere zones leggen">Onder</button>
+          <button type="button" id="zoneBoven" title="Boven andere zones leggen">Boven</button>
+        </div>
+        <div class="row">
+          <button type="button" id="selectieWissen">Wis selectie</button>
+        </div>
+      </div>
+
+      <h2>Deze hole</h2>
+      <div class="form">
+        <label>Naam <input type="text" id="holeNaamInvoer" maxlength="40"></label>
+        <label>Breedte (m) <input type="number" id="terreinBreedte" min="40" max="400" step="10"></label>
+        <label>Lengte (m) <input type="number" id="terreinLengte" min="60" max="900" step="10"></label>
+        <label>Par <input type="number" id="holePar" min="3" max="6"> <small>automatisch, tenzij je hem aanpast</small></label>
+        <label>Auto-putt binnen (m) <input type="number" id="autoPutt" min="0" max="15" step="0.5"></label>
+      </div>
+
+      <h2>Deze baan</h2>
+      <div class="form">
+        <label>Naam <input type="text" id="baanNaamInvoer" maxlength="40"></label>
+        <label>Thema <select id="baanThema"></select></label>
+      </div>
+      <div class="row">
+        <button type="button" id="speelBaan" class="primary">Speel deze baan</button>
+        <button type="button" id="bewaar">Bewaar op dit apparaat</button>
+      </div>
+      <div class="row">
+        <button type="button" id="toonTekst">Tekst tonen</button>
+        <button type="button" id="download">Download .json</button>
+        <button type="button" id="nieuweBaan">Nieuwe baan</button>
+      </div>
+      <div id="tekstVak" hidden>
+        <textarea id="baanTekst" rows="8" spellcheck="false"></textarea>
+        <div class="row">
+          <button type="button" id="kopieer">Kopieer</button>
+          <button type="button" id="laadTekst">Laad deze tekst</button>
+          <button type="button" id="sluitTekst">Sluit</button>
+        </div>
+      </div>
+      <p class="hint">Alles in meters. De tee staat onderaan, de vlag bovenaan. Latere zones liggen bovenop eerdere. Bewaren gebeurt op dit apparaat; online delen komt in week 4.</p>
+    </aside>
+  </div>
 
   <script src="vendor/babylon.js"></script>
   <script type="module" src="js/main.js"></script>

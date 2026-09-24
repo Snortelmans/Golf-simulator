@@ -1,16 +1,24 @@
 # Eigen Baan
 
 Bouw je eigen golfhole en speel hem op de Trackman Range van je club.
-Werknaam. Week 1 van het maandplan: één hole, één slag.
+Werknaam. Week 2 van het maandplan: de baanbouwer.
 
 ## Wat het nu doet
 
-- Laadt een hole uit een tekstbestand (`courses/hole-1.json`) en tekent hem in 3D in de browser.
+**Spelen**
+- Laadt een baan uit een tekstbestand en tekent elke hole in 3D in de browser.
 - Laat een verzonnen slag vliegen, stuiteren en uitrollen, met water, bunkers en heuvels.
-- Houdt de slagen bij en putt automatisch als de bal op de green ligt.
+- Telt de slagen, putt automatisch op de green en speelt alle holes achter elkaar.
 - Vier thema's: klassiek, lava, sneeuw, neon.
 
-Er hangt nog geen echte simulator aan. Dat is week 3.
+**Bouwen** (week 2)
+- Tekenen van bovenaf: tee en vlag slepen, zones klikken (fairway, green, bunker, water, teebox), heuvels en kuilen zetten.
+- Sjablonen om mee te beginnen: par 3 over water, par 4 recht, dogleg, par 5 met eilandgreen, par 6 monster.
+- Meerdere holes per baan, dupliceren, volgorde wisselen.
+- Par wordt automatisch berekend (3 tot 6), tenzij je hem zelf aanpast.
+- Bewaren op je eigen apparaat, en als tekst tonen, kopiëren, laden of downloaden.
+
+Er hangt nog geen echte simulator aan. Dat is week 3. Online delen is week 4.
 
 ## Zelf draaien
 
@@ -45,6 +53,9 @@ js/shots/shot-layer.js     één slagformaat voor alle simulators (de 'reisstekk
 js/shots/sim-source.js     verzonnen slagen per club
 js/shots/trackman-range-source.js   nog leeg, komt in week 3
 js/terrain.js              van baandata naar 3D (Babylon.js)
+js/editor.js               de bouwer: tekenen van bovenaf op een 2D-canvas
+js/templates.js            sjablonen (kant-en-klare holes)
+js/storage.js              bewaren op het apparaat, tekst in en uit
 js/main.js                 knoopt alles aan elkaar
 vendor/babylon.js          de 3D-bibliotheek (Babylon.js 9.28, Apache 2.0)
 docs/                      uitleg per onderwerp

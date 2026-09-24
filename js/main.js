@@ -1,65 +1,73 @@
-// Het startpunt van de app. Dit bestand knoopt alles aan elkaar:
-//   baan laden -> 3D bouwen -> slagbron starten -> knoppen koppelen -> slag animeren.
+// Het startpunt van de app. Twee standen: Spelen (3D) en Bouwen (2D van bovenaf).
+// Beide werken op hetzelfde baan-object. Wat je bouwt, speel je meteen.
 
-import { validateCourse, holeLength } from "./course-format.js";
+import { validateCourse, holeLength, computePar, distance } from "./course-format.js";
 import { HoleGame, surfaceLabel } from "./game.js";
 import { ShotBus } from "./shots/shot-layer.js";
 import { SimulatedSource, CLUBS } from "./shots/sim-source.js";
 import { buildHole, drawPath, toWorld, THEMES } from "./terrain.js";
+import { Editor } from "./editor.js";
+import { TEMPLATES } from "./templates.js";
+import { saveLocal, loadLocal, toText, fromText, newCourse } from "./storage.js";
 
 const el = (id) => document.getElementById(id);
+
+// ============ Gedeelde toestand ============
+let course = null; // de baan (één object voor bouwen én spelen)
+let holeIndex = 0; // welke hole er nu gespeeld of bewerkt wordt
+let mode = "spelen";
+const scores = []; // slagen per hole in deze ronde
+
+// ============ Spelen: 3D ============
 const canvas = el("scene");
 const engine = new BABYLON.Engine(canvas, true, { adaptToDeviceRatio: true });
 const scene = new BABYLON.Scene(engine);
-
-// Licht: een zachte hemel plus een zon voor schaduwrijk reliëf.
 const hemi = new BABYLON.HemisphericLight("hemel", new BABYLON.Vector3(0.2, 1, 0.1), scene);
 hemi.intensity = 0.75;
 const sun = new BABYLON.DirectionalLight("zon", new BABYLON.Vector3(-0.4, -1, 0.3), scene);
 sun.intensity = 0.7;
-
-// Camera: draait om een doel (de bal). Muis en vinger werken automatisch.
 const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, 1.25, 14, BABYLON.Vector3.Zero(), scene);
 camera.lowerRadiusLimit = 3;
-camera.upperRadiusLimit = 400;
+camera.upperRadiusLimit = 900;
 camera.upperBetaLimit = 1.5;
 camera.wheelPrecision = 8;
 camera.attachControl(canvas, true);
 
-let course, game, world, pathLine, animating = false;
+let game, world, pathLine, animating = false;
 const bus = new ShotBus();
 const sim = new SimulatedSource();
 sim.start(bus);
 
-// Iedere slag, van welke bron ook, komt hier binnen.
 bus.on((shot) => {
-  if (!game || animating) return;
+  if (!game || animating || mode !== "spelen") return;
   const entry = game.applyShot(shot);
   if (entry) playEntry(entry);
 });
 
-async function loadCourse(url) {
-  const res = await fetch(url);
-  const data = await res.json();
-  const errors = validateCourse(data);
-  if (errors.length) {
-    el("melding").textContent = "Baanbestand klopt niet: " + errors.join("; ");
-    return;
-  }
-  course = data;
-  startHole(course.theme || "classic");
+function startRound() {
+  scores.length = 0;
+  holeIndex = 0;
+  startHole(0);
 }
 
-function startHole(themeKey) {
+function startHole(index) {
+  if (!course.holes.length) {
+    el("melding").textContent = "Deze baan heeft nog geen holes. Ga naar Bouwen en voeg er een toe.";
+    return;
+  }
+  holeIndex = Math.min(index, course.holes.length - 1);
   if (world) world.dispose();
   if (pathLine) { pathLine.dispose(); pathLine = null; }
-  game = new HoleGame(course, 0);
-  world = buildHole(scene, game.hole, themeKey);
-  el("thema").value = themeKey;
-  el("holeNaam").textContent = `${game.hole.number}. ${game.hole.name || course.name}`;
+  game = new HoleGame(course, holeIndex);
+  world = buildHole(scene, game.hole, course.theme || "classic");
+  el("thema").value = course.theme || "classic";
+  el("holeNaam").textContent = `${holeIndex + 1}. ${game.hole.name || "Hole"}`;
   el("holeInfo").textContent = `Par ${game.par} · ${Math.round(holeLength(game.hole))} m`;
-  el("melding").textContent = "Kies een club en sla. De slag is verzonnen: er hangt nog geen simulator aan.";
+  el("melding").textContent = holeIndex === 0
+    ? "Kies een club en sla. De slag is verzonnen: er hangt nog geen simulator aan."
+    : `Hole ${holeIndex + 1}. Kies een club en sla.`;
   el("laatste").hidden = true;
+  el("volgende").hidden = true;
   lookBehindBall();
   updateHud();
 }
@@ -68,10 +76,12 @@ function updateHud() {
   el("slagen").textContent = game.strokes;
   el("afstand").textContent = game.finished ? "in het gat" : `${Math.round(game.distanceToPin())} m`;
   el("ligging").textContent = game.finished ? game.scoreName() : surfaceLabel(game.surface());
+  const played = scores.reduce((a, b) => a + b, 0) + (game.finished ? 0 : game.strokes);
+  const parSoFar = course.holes.slice(0, scores.length).reduce((a, h) => a + (h.par || computePar(holeLength(h))), 0);
+  el("ronde").textContent = scores.length ? `${played} (par ${parSoFar} na ${scores.length})` : `${played}`;
   el("clubs").querySelectorAll("button").forEach((b) => (b.disabled = game.finished || animating));
 }
 
-/** Zet de camera achter de bal, kijkend naar de vlag. */
 function lookBehindBall(radius = 14) {
   const b = game.ball, p = game.hole.pin;
   camera.target = toWorld(game.hole, b.x, b.y, 0.8);
@@ -80,16 +90,13 @@ function lookBehindBall(radius = 14) {
   camera.radius = radius;
 }
 
-/** Laat de bal het uitgerekende pad volgen, in echte tijd. */
 function playEntry(entry) {
   const { result, shot } = entry;
-  const hole = game.hole;
   animating = true;
   updateHud();
   showShot(shot, entry);
   if (pathLine) pathLine.dispose();
-  pathLine = drawPath(scene, hole, result.points, world.theme.flag);
-
+  pathLine = drawPath(scene, game.hole, result.points, world.theme.flag);
   const points = result.points;
   const duration = points[points.length - 1].t;
   const t0 = performance.now();
@@ -114,15 +121,22 @@ function finishEntry(entry) {
   world.ball.position = toWorld(game.hole, b.x, b.y, 0.2);
   el("melding").textContent = entry.message;
   if (game.finished) {
+    scores[holeIndex] = game.strokes;
     el("melding").textContent += ` Score: ${game.strokes} (${game.scoreName()}).`;
+    if (holeIndex < course.holes.length - 1) {
+      el("volgende").hidden = false;
+    } else {
+      const total = scores.reduce((a, b) => a + b, 0);
+      const par = course.holes.reduce((a, h) => a + (h.par || computePar(holeLength(h))), 0);
+      el("melding").textContent += ` Ronde klaar: ${total} slagen op par ${par} (${total - par >= 0 ? "+" : ""}${total - par}).`;
+    }
   }
   lookBehindBall(game.finished ? 20 : 14);
   updateHud();
 }
 
 function showShot(shot, entry) {
-  const box = el("laatste");
-  box.hidden = false;
+  el("laatste").hidden = false;
   el("lsClub").textContent = shot.club || "-";
   el("lsBron").textContent = shot.source;
   el("lsSpeed").textContent = `${shot.ballSpeed.toFixed(1)} m/s (${(shot.ballSpeed * 3.6).toFixed(0)} km/u)`;
@@ -132,26 +146,27 @@ function showShot(shot, entry) {
   el("lsCarry").textContent = `${Math.round(entry.result.carry)} m`;
 }
 
-// --- Knoppen
-const clubsBox = el("clubs");
+// Knoppen in de speelstand.
 for (const [key, club] of Object.entries(CLUBS)) {
   const b = document.createElement("button");
   b.type = "button";
   b.id = `club-${key}`;
   b.textContent = club.label;
   b.addEventListener("click", () => sim.hit(key, Number(el("kracht").value) / 100));
-  clubsBox.appendChild(b);
+  el("clubs").appendChild(b);
 }
 el("kracht").addEventListener("input", () => (el("krachtWaarde").textContent = `${el("kracht").value}%`));
-el("opnieuw").addEventListener("click", () => startHole(el("thema").value));
-const themaSelect = el("thema");
-for (const [key, t] of Object.entries(THEMES)) {
-  const o = document.createElement("option");
-  o.value = key;
-  o.textContent = t.label;
-  themaSelect.appendChild(o);
+el("opnieuw").addEventListener("click", startRound);
+el("volgende").addEventListener("click", () => startHole(holeIndex + 1));
+for (const sel of [el("thema"), el("baanThema")]) {
+  for (const [key, t] of Object.entries(THEMES)) {
+    const o = document.createElement("option");
+    o.value = key;
+    o.textContent = t.label;
+    sel.appendChild(o);
+  }
 }
-themaSelect.addEventListener("change", () => startHole(themaSelect.value));
+el("thema").addEventListener("change", () => { course.theme = el("thema").value; el("baanThema").value = course.theme; startHole(holeIndex); saveLocal(course); });
 el("cameraBal").addEventListener("click", () => lookBehindBall());
 el("cameraBoven").addEventListener("click", () => {
   camera.target = toWorld(game.hole, 0, game.hole.terrain.length / 2, 0);
@@ -160,11 +175,277 @@ el("cameraBoven").addEventListener("click", () => {
   camera.radius = game.hole.terrain.length * 1.1;
 });
 
-engine.runRenderLoop(() => scene.render());
+engine.runRenderLoop(() => { if (mode === "spelen") scene.render(); });
 window.addEventListener("resize", () => engine.resize());
+
+// ============ Bouwen: 2D ============
+const editor = new Editor(el("editor"), {
+  onChange: () => { refreshHoleForm(); saveLocal(course); },
+  onStatus: (text) => (el("bouwStatus").textContent = text),
+});
+
+for (const [key, t] of Object.entries(TEMPLATES)) {
+  const o = document.createElement("option");
+  o.value = key;
+  o.textContent = t.label;
+  el("sjabloon").appendChild(o);
+}
+el("sjabloon").value = "par4recht";
+
+function editHole(index) {
+  holeIndex = Math.max(0, Math.min(index, course.holes.length - 1));
+  const hole = course.holes[holeIndex];
+  editor.setHole(hole || null, course.theme);
+  refreshHoleList();
+  refreshHoleForm();
+}
+
+function refreshHoleList() {
+  const box = el("holeLijst");
+  box.innerHTML = "";
+  course.holes.forEach((h, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = `${i + 1}`;
+    b.title = h.name || "";
+    if (i === holeIndex) b.classList.add("active");
+    b.addEventListener("click", () => editHole(i));
+    box.appendChild(b);
+  });
+  if (!course.holes.length) box.textContent = "Nog geen holes. Kies een sjabloon en klik + Hole.";
+  el("baanNaam").textContent = `${course.name} · ${course.holes.length} hole${course.holes.length === 1 ? "" : "s"}`;
+}
+
+function refreshHoleForm() {
+  const hole = course.holes[holeIndex];
+  const has = Boolean(hole);
+  for (const id of ["holeNaamInvoer", "terreinBreedte", "terreinLengte", "holePar", "autoPutt", "holeDupliceren", "holeVerwijderen", "holeOmhoog", "holeOmlaag"]) el(id).disabled = !has;
+  el("baanNaamInvoer").value = course.name;
+  el("baanThema").value = course.theme || "classic";
+  if (!has) return;
+  el("holeNaamInvoer").value = hole.name || "";
+  el("terreinBreedte").value = hole.terrain.width;
+  el("terreinLengte").value = hole.terrain.length;
+  el("holePar").value = hole.par || computePar(distance(hole.tee, hole.pin));
+  el("autoPutt").value = hole.autoPuttMeters ?? 3;
+  refreshHoleList();
+  refreshSelection();
+}
+
+function refreshSelection() {
+  const sel = editor.selectedItem();
+  el("selectieOpties").hidden = !sel || (sel.kind !== "zone" && sel.kind !== "hill");
+  el("zoneTypeRij").hidden = sel?.kind !== "zone";
+  el("heuvelOpties").hidden = !(editor.tool === "heuvel" || sel?.kind === "hill");
+  if (sel?.kind === "zone") el("zoneType").value = sel.item.type;
+  if (sel?.kind === "hill") {
+    el("heuvelStraal").value = sel.item.radius;
+    el("heuvelHoogte").value = sel.item.delta;
+    showHillValues();
+  }
+}
+
+function showHillValues() {
+  el("heuvelStraalWaarde").textContent = `${el("heuvelStraal").value} m`;
+  const d = Number(el("heuvelHoogte").value);
+  el("heuvelHoogteWaarde").textContent = `${d >= 0 ? "+" : ""}${d} m`;
+}
+
+function changed() {
+  editor.draw();
+  refreshHoleForm();
+  saveLocal(course);
+}
+
+// Gereedschap kiezen.
+el("tools").querySelectorAll("button").forEach((b) => {
+  b.addEventListener("click", () => {
+    el("tools").querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    editor.setTool(b.dataset.tool);
+    refreshSelection();
+    el("draftKnoppen").hidden = true;
+  });
+});
+el("editor").addEventListener("pointerdown", () => setTimeout(() => {
+  el("draftKnoppen").hidden = !editor.draft;
+  refreshSelection();
+}, 0));
+el("draftKlaar").addEventListener("click", () => { editor.finishDraft(); el("draftKnoppen").hidden = true; });
+el("draftTerug").addEventListener("click", () => { editor.undoPoint(); el("draftKnoppen").hidden = !editor.draft; });
+el("draftAnnuleer").addEventListener("click", () => { editor.cancelDraft(); el("draftKnoppen").hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if (mode !== "bouwen" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "Enter") { editor.finishDraft(); el("draftKnoppen").hidden = true; }
+  if (e.key === "Escape") { editor.cancelDraft(); el("draftKnoppen").hidden = true; }
+  if (e.key === "Backspace" && editor.draft) { editor.undoPoint(); el("draftKnoppen").hidden = !editor.draft; }
+  if ((e.key === "Delete" || e.key === "Backspace") && !editor.draft) { editor.deleteSelected(); refreshSelection(); }
+});
+
+// Heuvel-schuifjes: gelden voor de nieuwe heuvel én voor de geselecteerde.
+for (const id of ["heuvelStraal", "heuvelHoogte"]) {
+  el(id).addEventListener("input", () => {
+    showHillValues();
+    editor.hillRadius = Number(el("heuvelStraal").value);
+    editor.hillDelta = Number(el("heuvelHoogte").value);
+    const sel = editor.selectedItem();
+    if (sel?.kind === "hill") { sel.item.radius = editor.hillRadius; sel.item.delta = editor.hillDelta; changed(); }
+    else editor.setTool(editor.tool);
+  });
+}
+showHillValues();
+
+// Selectie: zonetype, volgorde, wissen.
+el("zoneType").addEventListener("change", () => {
+  const sel = editor.selectedItem();
+  if (sel?.kind === "zone") { sel.item.type = el("zoneType").value; changed(); }
+});
+function moveZone(delta) {
+  const s = editor.selected;
+  if (s?.kind !== "zone") return;
+  const to = s.index + delta;
+  if (to < 0 || to >= course.holes[holeIndex].zones.length) return;
+  const zones = course.holes[holeIndex].zones;
+  [zones[s.index], zones[to]] = [zones[to], zones[s.index]];
+  editor.selected = { kind: "zone", index: to };
+  changed();
+}
+el("zoneOnder").addEventListener("click", () => moveZone(-1));
+el("zoneBoven").addEventListener("click", () => moveZone(1));
+el("selectieWissen").addEventListener("click", () => { editor.deleteSelected(); refreshSelection(); });
+
+// Holes toevoegen, dupliceren, verwijderen, verplaatsen.
+el("holeToevoegen").addEventListener("click", () => {
+  const hole = TEMPLATES[el("sjabloon").value].make();
+  hole.number = course.holes.length + 1;
+  course.holes.push(hole);
+  renumber();
+  editHole(course.holes.length - 1);
+  saveLocal(course);
+});
+el("holeDupliceren").addEventListener("click", () => {
+  const copy = JSON.parse(JSON.stringify(course.holes[holeIndex]));
+  copy.name = (copy.name || "Hole") + " (kopie)";
+  course.holes.splice(holeIndex + 1, 0, copy);
+  renumber();
+  editHole(holeIndex + 1);
+  saveLocal(course);
+});
+el("holeVerwijderen").addEventListener("click", () => {
+  course.holes.splice(holeIndex, 1);
+  renumber();
+  editHole(Math.max(0, holeIndex - 1));
+  saveLocal(course);
+});
+function swapHoles(delta) {
+  const to = holeIndex + delta;
+  if (to < 0 || to >= course.holes.length) return;
+  [course.holes[holeIndex], course.holes[to]] = [course.holes[to], course.holes[holeIndex]];
+  renumber();
+  editHole(to);
+  saveLocal(course);
+}
+el("holeOmhoog").addEventListener("click", () => swapHoles(-1));
+el("holeOmlaag").addEventListener("click", () => swapHoles(1));
+function renumber() {
+  course.holes.forEach((h, i) => (h.number = i + 1));
+}
+
+// Formulier van de hole.
+el("holeNaamInvoer").addEventListener("input", () => { course.holes[holeIndex].name = el("holeNaamInvoer").value; refreshHoleList(); saveLocal(course); });
+for (const id of ["terreinBreedte", "terreinLengte"]) {
+  el(id).addEventListener("change", () => {
+    const hole = course.holes[holeIndex];
+    hole.terrain.width = clamp(Number(el("terreinBreedte").value), 40, 400);
+    hole.terrain.length = clamp(Number(el("terreinLengte").value), 60, 900);
+    editor.resize();
+    changed();
+  });
+}
+el("holePar").addEventListener("change", () => {
+  const hole = course.holes[holeIndex];
+  hole.par = clamp(Number(el("holePar").value), 3, 6);
+  hole.parOverride = hole.par !== computePar(distance(hole.tee, hole.pin));
+  changed();
+});
+el("autoPutt").addEventListener("change", () => { course.holes[holeIndex].autoPuttMeters = clamp(Number(el("autoPutt").value), 0, 15); saveLocal(course); });
+
+// Baan: naam, thema, bewaren, spelen, tekst.
+el("baanNaamInvoer").addEventListener("input", () => { course.name = el("baanNaamInvoer").value; refreshHoleList(); saveLocal(course); });
+el("baanThema").addEventListener("change", () => { course.theme = el("baanThema").value; editor.setHole(course.holes[holeIndex] || null, course.theme); saveLocal(course); });
+el("speelBaan").addEventListener("click", () => setMode("spelen", true));
+el("bewaar").addEventListener("click", () => {
+  el("bouwStatus").textContent = saveLocal(course) ? "Bewaard op dit apparaat." : "Bewaren lukt niet in deze browser (privémodus?). Gebruik 'Tekst tonen'.";
+});
+el("toonTekst").addEventListener("click", () => { el("baanTekst").value = toText(course); el("tekstVak").hidden = false; });
+el("sluitTekst").addEventListener("click", () => (el("tekstVak").hidden = true));
+el("kopieer").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(el("baanTekst").value); el("bouwStatus").textContent = "Gekopieerd."; }
+  catch { el("baanTekst").select(); el("bouwStatus").textContent = "Kopiëren lukt niet automatisch; de tekst is geselecteerd, druk Ctrl+C."; }
+});
+el("laadTekst").addEventListener("click", () => {
+  const { course: loaded, error } = fromText(el("baanTekst").value);
+  if (error) { el("bouwStatus").textContent = error; return; }
+  course = loaded;
+  saveLocal(course);
+  editHole(0);
+  el("tekstVak").hidden = true;
+  el("bouwStatus").textContent = "Baan geladen uit tekst.";
+});
+el("download").addEventListener("click", () => {
+  const blob = new Blob([toText(course)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(course.name || "baan").replace(/[^\w-]+/g, "_")}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+el("nieuweBaan").addEventListener("click", () => {
+  course = newCourse();
+  saveLocal(course);
+  editHole(0);
+  el("bouwStatus").textContent = "Nieuwe lege baan. Kies een sjabloon en klik + Hole.";
+});
+
+function clamp(v, min, max) {
+  return Math.min(max, Math.max(min, Number.isFinite(v) ? v : min));
+}
+
+// ============ Standen wisselen ============
+function setMode(next, restart = false) {
+  mode = next;
+  el("spelen").hidden = next !== "spelen";
+  el("bouwen").hidden = next !== "bouwen";
+  el("tabSpelen").classList.toggle("active", next === "spelen");
+  el("tabBouwen").classList.toggle("active", next === "bouwen");
+  el("tabSpelen").setAttribute("aria-selected", next === "spelen");
+  el("tabBouwen").setAttribute("aria-selected", next === "bouwen");
+  if (next === "spelen") {
+    engine.resize();
+    if (restart || !game) startRound();
+    else startHole(holeIndex);
+  } else {
+    editHole(holeIndex);
+    editor.resize();
+  }
+}
+el("tabSpelen").addEventListener("click", () => setMode("spelen"));
+el("tabBouwen").addEventListener("click", () => setMode("bouwen"));
 
 // Handig om te leren: open de console (F12) en typ bijvoorbeeld
 //   eigenBaan.sim.custom({ ballSpeed: 70, launchAngle: 10, direction: 5, backSpin: 2500 })
-window.eigenBaan = { get game() { return game; }, sim, bus, scene, camera, CLUBS };
+window.eigenBaan = { get game() { return game; }, get course() { return course; }, sim, bus, scene, camera, CLUBS, editor };
 
-loadCourse("courses/hole-1.json");
+// ============ Start ============
+async function boot() {
+  course = loadLocal();
+  if (!course) {
+    const res = await fetch("courses/hole-1.json");
+    course = await res.json();
+    const errors = validateCourse(course);
+    if (errors.length) { el("melding").textContent = "Baanbestand klopt niet: " + errors.join("; "); return; }
+  }
+  refreshHoleList();
+  setMode("spelen", true);
+}
+boot();
