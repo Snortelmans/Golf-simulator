@@ -1,6 +1,6 @@
 # Eigen Baan
 
-Code: https://github.com/Snortelmans/golf-simulator · Online: https://snortelmans.github.io/golf-simulator/ (zodra GitHub Pages aan staat)
+Code: https://github.com/Snortelmans/golf-simulator · Online: https://snortelmans.github.io/Golf-simulator/
 
 Bouw je eigen golfhole en speel hem op de Trackman Range van je club.
 Werknaam. Week 4 van het maandplan: delen en het voorstel.
