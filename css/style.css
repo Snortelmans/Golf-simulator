@@ -90,12 +90,15 @@ select, input[type="text"], input[type="number"] { padding: 6px 8px; }
 .scorekaart td.min { color: var(--accent); }
 .scorekaart td.plus { color: #ff8a80; }
 .scorekaart td:first-child, .scorekaart th:first-child { text-align: left; }
+.scorekaart .lijst { display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.scorekaart .lijst button { text-align: left; display: grid; gap: 2px; }
+.scorekaart .lijst button small { color: var(--muted); font-size: 0.75rem; }
 
 /* ===== Bouwen ===== */
-#bouwen { display: grid; grid-template-columns: 1fr 340px; }
+#bouwen { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: minmax(0, 1fr); }
 .bouwPaneel {
   background: #131f18; border-left: 1px solid var(--line);
-  padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); overflow: auto;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); overflow: auto; min-height: 0; max-height: 100%;
   display: grid; gap: 8px; align-content: start;
 }
 .holes { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -109,7 +112,7 @@ textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; f
 .hint { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin: 4px 0 0; }
 
 @media (max-width: 760px) {
-  #bouwen { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+  #bouwen { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
   .bouwPaneel { border-left: none; border-top: 1px solid var(--line); max-height: 48vh; }
   .tools { grid-template-columns: repeat(4, 1fr); }
   .panel { left: 8px; right: 8px; width: auto; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 10px; gap: 8px; }

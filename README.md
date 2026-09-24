@@ -1,7 +1,7 @@
 # Eigen Baan
 
 Bouw je eigen golfhole en speel hem op de Trackman Range van je club.
-Werknaam. Week 3 van het maandplan: een ronde en de simulator-stekker.
+Werknaam. Week 4 van het maandplan: delen en het voorstel.
 
 ## Wat het nu doet
 
@@ -23,7 +23,19 @@ Werknaam. Week 3 van het maandplan: een ronde en de simulator-stekker.
 - Drie bronnen van slagen: verzonnen, GSPro Open Connect (via een brug op de pc) en Trackman Range.
 - Nagebouwde Trackman Range om zonder toegang te testen. Zie [docs/simulators.md](docs/simulators.md).
 
-Online delen is week 4.
+**Delen** (week 4)
+- Banen publiceren, banen van anderen spelen, ranglijst per baan. Gebouwd op Supabase (gratis).
+- Staat uit tot er een Supabase-project is gekoppeld, zie hieronder.
+
+## Online delen aanzetten
+
+1. Maak een gratis project op supabase.com (kies regio EU, bijvoorbeeld Frankfurt).
+2. Open in het project de SQL Editor, plak de inhoud van `supabase/schema.sql` en klik Run.
+3. Ga naar Project Settings > API. Kopieer de Project URL en de `anon` `public` key.
+4. Maak naast `index.html` een bestand `config.json` (zie `config.example.json`) met die twee waarden.
+5. Herlaad de app. Onder 'Banen online' en 'Publiceer online' werkt het nu.
+
+De anon key mag openbaar zijn: de regels in `schema.sql` staan alleen lezen en toevoegen toe.
 
 ## Zelf draaien
 
@@ -59,6 +71,9 @@ js/shots/sim-source.js     verzonnen slagen per club
 js/shots/openconnect-source.js      GSPro Open Connect (launch monitors thuis)
 js/shots/trackman-range-source.js   Trackman Range (op de club)
 js/seasons.js              seizoenen en wind
+js/cloud.js                online delen via Supabase
+supabase/schema.sql        de tabellen en regels voor Supabase
+config.example.json        voorbeeld van config.json
 js/terrain.js              van baandata naar 3D (Babylon.js)
 js/editor.js               de bouwer: tekenen van bovenaf op een 2D-canvas
 js/templates.js            sjablonen (kant-en-klare holes)

@@ -33,7 +33,22 @@
     <section class="scorekaart" id="scorekaart" hidden aria-label="Scorekaart">
       <h2>Scorekaart</h2>
       <div class="tablewrap"><table id="scoreTabel"></table></div>
+      <div id="ranglijst" hidden>
+        <h2>Ranglijst op deze baan</h2>
+        <div class="tablewrap"><table id="ranglijstTabel"></table></div>
+      </div>
       <button type="button" id="sluitScorekaart">Sluit</button>
+    </section>
+
+    <section class="scorekaart" id="online" hidden aria-label="Banen online">
+      <h2>Banen van anderen</h2>
+      <p class="hint" id="onlineStatus"></p>
+      <div class="lijst" id="onlineLijst"></div>
+      <div class="row">
+        <label for="bijnaam">Bijnaam</label>
+        <input type="text" id="bijnaam" maxlength="40" placeholder="voor de ranglijst">
+        <button type="button" id="sluitOnline">Sluit</button>
+      </div>
     </section>
 
     <section class="panel" aria-label="Bediening">
@@ -67,6 +82,7 @@
         <label for="seizoen">Seizoen</label>
         <select id="seizoen"></select>
         <button type="button" id="toonScorekaart">Scorekaart</button>
+        <button type="button" id="toonOnline">Banen online</button>
       </div>
       <div class="row">
         <label for="thema">Thema</label>
@@ -177,6 +193,12 @@
         <button type="button" id="download">Download .json</button>
         <button type="button" id="nieuweBaan">Nieuwe baan</button>
       </div>
+      <div class="row">
+        <label for="bouwBijnaam">Bijnaam</label>
+        <input type="text" id="bouwBijnaam" maxlength="40" placeholder="wie heeft dit gebouwd?">
+        <button type="button" id="publiceer">Publiceer online</button>
+      </div>
+      <p class="hint" id="publiceerStatus" hidden></p>
       <div id="tekstVak" hidden>
         <textarea id="baanTekst" rows="8" spellcheck="false"></textarea>
         <div class="row">

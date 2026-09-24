@@ -12,6 +12,7 @@ import { Editor } from "./editor.js";
 import { TEMPLATES } from "./templates.js";
 import { saveLocal, loadLocal, toText, fromText, newCourse } from "./storage.js";
 import { SEASONS, randomWind, describeWind } from "./seasons.js";
+import { initCloud, cloudEnabled, listCourses, fetchCourse, publishCourse, postScore, leaderboard } from "./cloud.js";
 
 const el = (id) => document.getElementById(id);
 
@@ -22,7 +23,12 @@ let mode = "spelen";
 const scores = []; // slagen per hole in deze ronde
 let seasonKey = "lente";
 let wind = { x: 0, y: 0, speed: 0 };
-try { seasonKey = localStorage.getItem("eigenbaan.seizoen") || "lente"; } catch { /* niets */ }
+let nickname = "";
+try {
+  seasonKey = localStorage.getItem("eigenbaan.seizoen") || "lente";
+  nickname = localStorage.getItem("eigenbaan.bijnaam") || "";
+} catch { /* niets */ }
+const CLOUD_OFF = "Online delen staat nog uit. Daarvoor is een Supabase-project nodig (zie README).";
 
 // ============ Spelen: 3D ============
 const canvas = el("scene");
@@ -188,6 +194,11 @@ function finishEntry(entry) {
       const par = course.holes.reduce((a, h) => a + holePar(h), 0);
       el("melding").textContent += ` Ronde klaar: ${total} slagen, ${signed(total - par)}.`;
       showScorecard();
+      if (course.cloudId && cloudEnabled()) {
+        postScore(course.cloudId, nickname, total, par, { season: seasonKey, source: sourceKey })
+          .then(() => showLeaderboard())
+          .catch((e) => (el("melding").textContent += ` (Score niet online gezet: ${e.message})`));
+      }
     }
   }
   lookBehindBall(game.finished ? 20 : 14);
@@ -229,7 +240,83 @@ function showScorecard() {
   const diffRow = `<tr><th>+/-</th>${holes.map((h, i) => played[i] == null ? "<td></td>" : `<td>${signed(played[i] - holePar(h))}</td>`).join("")}<td>${signed(total - parPlayed)}</td></tr>`;
   table.innerHTML = head + parRow + scoreRow + diffRow;
   el("scorekaart").hidden = false;
+  el("ranglijst").hidden = true;
+  if (course.cloudId && cloudEnabled()) showLeaderboard();
 }
+
+async function showLeaderboard() {
+  try {
+    const rows = await leaderboard(course.cloudId);
+    const table = el("ranglijstTabel");
+    table.innerHTML = `<tr><th>Speler</th><th>Slagen</th><th>+/-</th><th>Seizoen</th></tr>` +
+      rows.map((r) => `<tr><td>${escapeHtml(r.player)}</td><td>${r.strokes}</td><td>${signed(r.strokes - r.par)}</td><td>${r.season || ""}</td></tr>`).join("");
+    if (!rows.length) table.innerHTML += `<tr><td colspan="4">Nog geen scores. Jij kunt de eerste zijn.</td></tr>`;
+    el("ranglijst").hidden = false;
+  } catch (e) {
+    el("ranglijst").hidden = true;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Banen van anderen.
+async function showOnline() {
+  const box = el("online");
+  box.hidden = false;
+  el("scorekaart").hidden = true;
+  el("bijnaam").value = nickname;
+  const list = el("onlineLijst");
+  list.innerHTML = "";
+  if (!cloudEnabled()) { el("onlineStatus").textContent = CLOUD_OFF; return; }
+  el("onlineStatus").textContent = "Laden…";
+  try {
+    const rows = await listCourses();
+    el("onlineStatus").textContent = rows.length ? `${rows.length} banen. Klik om te spelen.` : "Nog geen banen online. Bouw er een en publiceer hem.";
+    for (const r of rows) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = `<span>${escapeHtml(r.name)}</span><small>${r.holes} holes · par ${r.par} · door ${escapeHtml(r.author)} · ${r.plays}× gespeeld</small>`;
+      b.addEventListener("click", async () => {
+        el("onlineStatus").textContent = "Baan ophalen…";
+        try {
+          course = await fetchCourse(r.id);
+          saveLocal(course);
+          box.hidden = true;
+          refreshHoleList();
+          startRound();
+        } catch (e) { el("onlineStatus").textContent = e.message; }
+      });
+      list.appendChild(b);
+    }
+  } catch (e) {
+    el("onlineStatus").textContent = "Ophalen mislukt: " + e.message;
+  }
+}
+el("toonOnline").addEventListener("click", () => { if (el("online").hidden) showOnline(); else el("online").hidden = true; });
+el("sluitOnline").addEventListener("click", () => (el("online").hidden = true));
+for (const id of ["bijnaam", "bouwBijnaam"]) {
+  el(id).addEventListener("input", () => {
+    nickname = el(id).value.trim();
+    try { localStorage.setItem("eigenbaan.bijnaam", nickname); } catch { /* niets */ }
+    el(id === "bijnaam" ? "bouwBijnaam" : "bijnaam").value = nickname;
+  });
+}
+el("publiceer").addEventListener("click", async () => {
+  const status = el("publiceerStatus");
+  status.hidden = false;
+  if (!cloudEnabled()) { status.textContent = CLOUD_OFF; return; }
+  status.textContent = "Publiceren…";
+  try {
+    const id = await publishCourse(course, nickname);
+    course.cloudId = id;
+    saveLocal(course);
+    status.textContent = `Gepubliceerd. Iedereen met de app ziet "${course.name}" nu onder Banen online.`;
+  } catch (e) {
+    status.textContent = "Publiceren mislukt: " + e.message;
+  }
+});
 el("toonScorekaart").addEventListener("click", () => { if (el("scorekaart").hidden) showScorecard(); else el("scorekaart").hidden = true; });
 el("sluitScorekaart").addEventListener("click", () => (el("scorekaart").hidden = true));
 
@@ -530,6 +617,9 @@ window.eigenBaan = { get game() { return game; }, get course() { return course; 
 
 // ============ Start ============
 async function boot() {
+  await initCloud();
+  el("bijnaam").value = nickname;
+  el("bouwBijnaam").value = nickname;
   course = loadLocal();
   if (!course) {
     const res = await fetch("courses/hole-1.json");
