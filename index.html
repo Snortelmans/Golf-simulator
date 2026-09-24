@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Eigen Baan</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="scene" aria-label="3D-weergave van de hole"></canvas>
+
+  <header class="hud">
+    <h1 id="holeNaam">Baan laden…</h1>
+    <span class="stat" id="holeInfo"></span>
+    <span class="stat">Slagen <b id="slagen">0</b></span>
+    <span class="stat">Tot de vlag <b id="afstand">-</b></span>
+    <span class="stat">Ligging <b id="ligging">-</b></span>
+  </header>
+
+  <section class="panel" aria-label="Bediening">
+    <p id="melding">Baan laden…</p>
+    <h2>Sla (verzonnen slag)</h2>
+    <div class="clubs" id="clubs"></div>
+    <div class="row">
+      <label for="kracht">Kracht</label>
+      <input type="range" id="kracht" min="30" max="110" value="100">
+      <span id="krachtWaarde">100%</span>
+    </div>
+    <div class="row">
+      <label for="thema">Thema</label>
+      <select id="thema"></select>
+      <button type="button" id="cameraBal" title="Camera achter de bal">Bal</button>
+      <button type="button" id="cameraBoven" title="Camera van boven">Boven</button>
+      <button type="button" id="opnieuw">Opnieuw</button>
+    </div>
+    <div class="laatste" id="laatste" hidden>
+      <span>Club</span><b id="lsClub"></b>
+      <span>Bron</span><b id="lsBron"></b>
+      <span>Balsnelheid</span><b id="lsSpeed"></b>
+      <span>Lanceerhoek</span><b id="lsAngle"></b>
+      <span>Richting</span><b id="lsDir"></b>
+      <span>Back/sidespin</span><b id="lsSpin"></b>
+      <span>Carry</span><b id="lsCarry"></b>
+    </div>
+  </section>
+
+  <script src="vendor/babylon.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
